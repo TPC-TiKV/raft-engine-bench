@@ -1,0 +1,16 @@
+[package]
+name = "async-version"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+raft-engine = { git = "https://github.com/TPC-TiKV/raft-engine.git", branch = "tpc-no-dsync" }
+# raft-engine = { path = "/data2/raft-engine" }
+glommio = { git = "https://github.com/TPC-TiKV/glommio.git", branch = "tpc" }
+futures-lite = "1.12"
+crossbeam-channel = "0.5.1"
+async-channel = "1"
+raft = "0.6.0"
+bytes = "1"
