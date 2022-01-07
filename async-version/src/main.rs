@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, mem, sync::Arc, thread};
+use std::{collections::VecDeque, mem, sync::Arc, thread, time::Duration};
 
 use bytes::Bytes;
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
@@ -26,7 +26,7 @@ struct Region {
 fn main() {
     let config = Config {
         dir: "/data2/async-version".to_owned(),
-        purge_threshold: ReadableSize::gb(10),
+        purge_threshold: ReadableSize::gb(5),
         batch_compression_threshold: ReadableSize::kb(0),
         ..Default::default()
     };
@@ -43,17 +43,24 @@ fn main() {
             })
             .unwrap();
     }
-    let handles: Vec<_> = (0..2)
+    let engine_ = engine.clone();
+    thread::spawn(move || loop {
+        engine_.purge_expired_files().ok();
+        thread::sleep(Duration::from_secs(5));
+    });
+    let handles: Vec<_> = (0..4)
         .map(move |i| {
             let engine = engine.clone();
             let producer_tx = producer_tx.clone();
             let consumer_rx = consumer_rx.clone();
             LocalExecutorBuilder::new(Placement::Fixed(i + 1))
+                // .record_io_latencies(true)
                 .spawn(move || run_worker(engine, consumer_rx, producer_tx))
                 .unwrap()
         })
         .collect();
-    for _ in 0..10000000 {
+
+    loop {
         let mut region = producer_rx.recv().unwrap();
         for _ in 0..1 {
             let mut entry = Entry::default();
@@ -64,10 +71,10 @@ fn main() {
         }
         consumer_tx.try_send(region).unwrap();
     }
-    drop(consumer_tx);
-    handles
-        .into_iter()
-        .for_each(|handle| handle.join().unwrap());
+    // drop(consumer_tx);
+    // handles
+    //     .into_iter()
+    //     .for_each(|handle| handle.join().unwrap());
 }
 
 async fn run_worker(
@@ -75,11 +82,28 @@ async fn run_worker(
     consumer_rx: async_channel::Receiver<Region>,
     producer_tx: Sender<Region>,
 ) {
+    // glommio::spawn_local(async {
+    //     loop {
+    //         let ring = &glommio::executor().io_stats().all_rings();
+    //         let latency = ring.io_latency_us();
+    //         println!(
+    //             "io latency {:?}us",
+    //             latency.sum().map(|sum| sum / latency.count() as f64)
+    //         );
+    //         // println!("{:?}", glommio::executor().io_stats());
+    //         glommio::timer::sleep(Duration::from_secs(2)).await;
+    //     }
+    // })
+    // .detach();
     loop {
         let mut batch = LogBatch::with_capacity(256);
         let mut regions = Vec::new();
+        let mut compacts = Vec::new();
         match consumer_rx.recv().await {
             Ok(mut region) => {
+                if region.entries[0].index % 10 == 9 {
+                    compacts.push((region.id, region.entries[0].index - 5));
+                }
                 batch
                     .add_entries::<MessageExtTyped>(region.id, &region.entries)
                     .unwrap();
@@ -89,23 +113,35 @@ async fn run_worker(
             Err(_) => break,
         }
         while let Ok(mut region) = consumer_rx.try_recv() {
+            if region.entries[0].index % 10 == 9 {
+                compacts.push((region.id, region.entries[0].index - 5));
+            }
             batch
                 .add_entries::<MessageExtTyped>(region.id, &region.entries)
                 .unwrap();
             region.entries.clear();
             regions.push(region);
-            if regions.len() >= 64 {
+            if regions.len() >= 8 {
                 break;
             }
         }
-        let engine = engine.clone();
-        let producer_tx = producer_tx.clone();
-        glommio::spawn_local(async move {
-            engine.write_async(&mut batch).await.unwrap();
-            for region in regions.drain(..) {
-                producer_tx.send(region).unwrap();
+        if !regions.is_empty() {
+            for (region_id, index) in compacts {
+                let engine = engine.clone();
+                glommio::spawn_local(async move {
+                    engine.compact_to_async(region_id, index).await;
+                })
+                .detach();
             }
-        })
-        .detach();
+            let engine = engine.clone();
+            let producer_tx = producer_tx.clone();
+            glommio::spawn_local(async move {
+                engine.write_async(&mut batch).await.unwrap();
+                for region in regions.drain(..) {
+                    producer_tx.send(region).unwrap();
+                }
+            })
+            .detach();
+        }
     }
 }
