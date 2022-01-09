@@ -54,6 +54,7 @@ fn main() {
             let producer_tx = producer_tx.clone();
             let consumer_rx = consumer_rx.clone();
             LocalExecutorBuilder::new(Placement::Fixed(i + 1))
+                .ring_depth(1024)
                 // .record_io_latencies(true)
                 .spawn(move || run_worker(engine, consumer_rx, producer_tx))
                 .unwrap()
@@ -121,7 +122,7 @@ async fn run_worker(
                 .unwrap();
             region.entries.clear();
             regions.push(region);
-            if regions.len() >= 8 {
+            if regions.len() >= 64 {
                 break;
             }
         }

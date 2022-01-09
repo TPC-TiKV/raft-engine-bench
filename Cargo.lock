@@ -49,7 +49,7 @@ dependencies = [
  "futures-lite",
  "glommio",
  "raft",
- "raft-engine 0.1.0 (git+https://github.com/sticnarf/raft-engine.git?branch=tpc-reuse-file)",
+ "raft-engine 0.1.0 (git+https://github.com/TPC-TiKV/raft-engine.git?branch=tpc)",
 ]
 
 [[package]]
@@ -787,7 +787,7 @@ dependencies = [
 [[package]]
 name = "raft-engine"
 version = "0.1.0"
-source = "git+https://github.com/sticnarf/raft-engine.git?branch=tpc-reuse-file#c4e054a5c06eca40d266a894205e8c6a3e802a54"
+source = "git+https://github.com/TPC-TiKV/raft-engine.git?branch=tpc#0bacc943c1bb3015cf44ee3018ccf2774ef19a1a"
 dependencies = [
  "byteorder",
  "crc32fast",

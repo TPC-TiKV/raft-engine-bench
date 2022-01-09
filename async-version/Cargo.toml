@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-raft-engine = { git = "https://github.com/sticnarf/raft-engine.git", branch = "tpc-reuse-file" }
+raft-engine = { git = "https://github.com/TPC-TiKV/raft-engine.git", branch = "tpc" }
 # raft-engine = { path = "/data2/raft-engine" }
 glommio = { git = "https://github.com/TPC-TiKV/glommio.git", branch = "tpc" }
 # glommio = { path = "/home/yilin/Code/glommio/glommio" }
